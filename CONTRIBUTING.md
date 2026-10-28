@@ -49,6 +49,10 @@ CI runs these on Linux, Windows and macOS with Python 3.10 to 3.13.
 ## Releasing
 
 1. Update `__version__` in `src/atrfu/__init__.py`, `CHANGELOG.md` and `CITATION.cff`.
-2. Commit, then create a GitHub release with tag `vX.Y.Z`. The release workflow
-   publishes to PyPI, Zenodo archives the release, and Read the Docs builds
+2. Commit and push. Wait for CI to pass.
+3. Optional dry run: Actions > Release > Run workflow. This uploads to
+   TestPyPI and solves the quick start with the installed package.
+4. Create a GitHub release with tag `vX.Y.Z` (the tag must match
+   `__version__`). The release workflow repeats the TestPyPI check and then
+   publishes to PyPI. Zenodo archives the release, and Read the Docs builds
    the docs for the tag.

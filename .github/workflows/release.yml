@@ -1,0 +1,100 @@
+# Publishing with PyPI trusted publishing (no API tokens).
+#  - Run manually (Actions > Release > Run workflow): build, upload to TestPyPI,
+#    install from TestPyPI and solve the quick start. Nothing goes to PyPI.
+#  - Publish a GitHub release (tag vX.Y.Z): the same steps, then upload to PyPI.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: version
+        name: Read the version (and check it matches the release tag)
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/atrfu/__init__.py)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = release ] && [ "${{ github.ref_name }}" != "v$version" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match __version__ $version"; exit 1
+          fi
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check --strict dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/atrfu/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true   # a release after a manual run re-uploads the same version
+
+  smoke-test:
+    needs: [build, testpypi]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          python-version: "3.12"
+          activate-environment: smoke
+          conda-remove-defaults: "true"
+      - run: conda install -y ipopt
+      - name: Install atrfu from TestPyPI (its dependencies from PyPI)
+        run: |
+          pip install "pyomo>=6.7" "numpy>=1.24"
+          for i in 1 2 3 4 5; do
+            pip install --no-deps --index-url https://test.pypi.org/simple/ \
+              "atrfu==${{ needs.build.outputs.version }}" && break
+            sleep 30   # the new version can take a moment to appear
+          done
+          pip show atrfu
+      - name: Solve the quick start with the installed package
+        run: |
+          cp examples/quickstart.py "$RUNNER_TEMP/" && cd "$RUNNER_TEMP"
+          atrfu check
+          python quickstart.py
+
+  pypi:
+    if: github.event_name == 'release'
+    needs: smoke-test
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/atrfu/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
