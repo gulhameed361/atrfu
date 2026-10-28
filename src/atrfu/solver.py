@@ -287,8 +287,9 @@ class TrustRegionSolver:
             ``restorations`` (rejected restoration iterations), ``frp_solves``,
             ``restoration_phases``, ``wall_s``, ``cpu_s``, problem sizes
             (``n_vars``, ``n_vars_xyz``, ``n_constraints``, ...), ``duals``
-            (with report_duals=1) and ``trajectory`` (per-iteration theta,
-            obj, chi, trust_radius, sample_radius, step_norm).
+            (with report_duals=1) and ``trajectory`` (theta, obj, chi,
+            trust_radius, sample_radius, step_norm at each iterate, from the
+            starting point, iteration 0).
         """
         model_vars = list(model.component_data_objects(Var))
         # The clone deep-copies config too, so the run (which mutates config

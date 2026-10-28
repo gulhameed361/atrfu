@@ -123,10 +123,9 @@ def TRF(m, eflist, config):
     _t_cpu0 = time.process_time()
 
     out = printer(config.verbose)
-    ensure_gjh(verbose=config.verbose >= 2)
-
     logger = Logger()
-    problem = PyomoInterface(m, eflist, config)
+    problem = PyomoInterface(m, eflist, config)   # also checks the problem
+    ensure_gjh(verbose=config.verbose >= 2)
     x, y, z = problem.getInitialValue()
     lx, ly, lz = problem.lx, problem.ly, problem.lz
     neq, nineq = problem.count_constraints()

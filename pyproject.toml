@@ -53,3 +53,7 @@ extend-exclude = ["dev/out"]
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "B", "UP", "I"]
+
+[tool.ruff.lint.isort]
+# tests import their shared helpers from conftest
+known-first-party = ["atrfu", "conftest"]
