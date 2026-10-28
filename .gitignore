@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.venv/
+gjh
+gjh.exe
+*.download
+dev/out/
+dev/out_*.txt
+docs/_build/

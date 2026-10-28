@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atrfu"
+dynamic = ["version"]
+description = "A-TRFu: advanced trust-region funnel method for grey-box optimisation with Pyomo"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT AND BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Gul Hameed" }]
+keywords = ["grey-box optimisation", "trust-region", "funnel", "filter",
+            "hypervolume", "surrogate", "derivative-free", "Pyomo"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pyomo>=6.7",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+dev = ["pytest>=7", "ruff", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/gulhameed361/atrfu"
+Issues = "https://github.com/gulhameed361/atrfu/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "atrfu.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: longer solves (deselect with -m 'not slow')"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["dev/out"]
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "B", "UP", "I"]
