@@ -6,7 +6,7 @@ import atrfu
 from atrfu.solver import CONFIG, DOCS, GROUPS
 
 project = 'atrfu'
-author = 'Gul Hameed'
+author = 'Gul Hameed, Tao Chen, Antonio del Rio Chanona, Lorenz T. Biegler, Michael Short'
 copyright = '2026, Gul Hameed'
 release = version = atrfu.__version__
 

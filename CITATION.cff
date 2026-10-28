@@ -8,6 +8,18 @@ authors:
     given-names: Gul
     orcid: "https://orcid.org/0000-0002-2069-5132"
     affiliation: "School of Chemistry and Chemical Engineering, University of Surrey"
+  - family-names: Chen
+    given-names: Tao
+    affiliation: "University of Surrey"
+  - family-names: "del Rio Chanona"
+    given-names: Antonio
+    affiliation: "Imperial College London"
+  - family-names: Biegler
+    given-names: "Lorenz T."
+    affiliation: "Carnegie Mellon University"
+  - family-names: Short
+    given-names: Michael
+    affiliation: "University of Surrey"
 version: "1.0.0"
 license: MIT
 repository-code: "https://github.com/gulhameed361/atrfu"
@@ -37,6 +49,14 @@ references:
       - family-names: Hameed
         given-names: Gul
         orcid: "https://orcid.org/0000-0002-2069-5132"
+      - family-names: Chen
+        given-names: Tao
+      - family-names: "del Rio Chanona"
+        given-names: Antonio
+      - family-names: Biegler
+        given-names: "Lorenz T."
+      - family-names: Short
+        given-names: Michael
     status: in-preparation
   - type: software
     title: "A-TRFu: advanced trust-region funnel method for grey-box optimisation"

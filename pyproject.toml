@@ -10,7 +10,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT AND BSD-3-Clause"
 license-files = ["LICENSE"]
-authors = [{ name = "Gul Hameed" }]
+authors = [
+    { name = "Gul Hameed" },
+    { name = "Tao Chen" },
+    { name = "Antonio del Rio Chanona" },
+    { name = "Lorenz T. Biegler" },
+    { name = "Michael Short" },
+]
 keywords = ["grey-box optimisation", "trust-region", "funnel", "filter",
             "hypervolume", "surrogate", "derivative-free", "Pyomo"]
 classifiers = [
