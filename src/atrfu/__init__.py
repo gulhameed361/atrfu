@@ -7,9 +7,10 @@ box by a local surrogate and solves a sequence of trust-region subproblems.
     from atrfu import TrustRegionSolver
     result = TrustRegionSolver().solve(model, efmap)
 """
-from ._gjh import ensure_gjh
-from .solver import TrustRegionSolver
-
 __version__ = "1.0.0"
 
-__all__ = ["TrustRegionSolver", "ensure_gjh", "__version__"]
+from ._gjh import ensure_gjh  # noqa: E402
+from .presets import PRESETS  # noqa: E402
+from .solver import TrustRegionSolver  # noqa: E402
+
+__all__ = ["PRESETS", "TrustRegionSolver", "ensure_gjh", "__version__"]

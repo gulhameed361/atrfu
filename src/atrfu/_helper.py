@@ -41,6 +41,15 @@ def system_report():
     return "\n".join(lines)
 
 
+def printer(verbose):
+    """print() that is silent when ``verbose`` is below the message ``level``
+    (1 = summary, 2 = per-iteration detail)."""
+    def out(*args, level=1, **kwargs):
+        if verbose >= level:
+            print(*args, **kwargs)
+    return out
+
+
 def cloneXYZ(x, y, z):
     """
     This function is to create a hard copy of vector x, y, z.

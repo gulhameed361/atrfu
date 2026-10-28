@@ -25,10 +25,12 @@ def bb2(a, b):
 
 def build_model():
     m = ConcreteModel()
+    # Every variable has finite bounds: by default (scaling=0) the trust region
+    # is measured in units of each variable's bound range.
     m.x1 = Var(bounds=(-3, 3), initialize=0.5)
     m.x2 = Var(bounds=(-3, 3), initialize=0.5)
-    m.y1 = Var(initialize=0.0)
-    m.y2 = Var(initialize=0.0)
+    m.y1 = Var(bounds=(0, 18), initialize=0.0)
+    m.y2 = Var(bounds=(-4, 4), initialize=0.0)
 
     m.bb1 = ExternalFunction(bb1)
     m.bb2 = ExternalFunction(bb2)

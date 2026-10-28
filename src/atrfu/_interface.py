@@ -16,8 +16,7 @@ from pyomo.core import (
     Block,
     ConcreteModel,
     Constraint,
-    ConstraintList,
-    Objective,
+        Objective,
     Param,
     RangeSet,
     Reals,
@@ -30,89 +29,55 @@ from pyomo.core import (
     sqrt,
     value,
 )
-from pyomo.core.base.external import PythonCallbackFunction
-from pyomo.core.expr.numvalue import native_types, nonpyomo_leaf_types
+from pyomo.core.expr.numvalue import nonpyomo_leaf_types
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
 from pyomo.util.infeasible import log_infeasible_constraints
 
-from ._helper import maxIgnoreNone, minIgnoreNone
+from ._helper import maxIgnoreNone, minIgnoreNone, printer
+from ._validate import check_efmap
 
 # Sentinel distinguishing "absent" from a cached value of None.
 _CACHE_MISS = object()
 
 
 class ReplaceEFVisitor(EXPR.ExpressionReplacementVisitor):
-    def __init__(self, trf_block, efDict):
-        super().__init__(
-            descend_into_named_expressions=True,
-            remove_named_expressions=False)
+    """Replace each black-box call ef(x1, x2, ...) in efDict by a new output
+    variable y of its block; record calls to ExternalFunctions not in efDict
+    in ``unmapped``."""
+
+    def __init__(self, trf_block, efDict, unmapped):
+        super().__init__(descend_into_named_expressions=True,
+                         remove_named_expressions=False)
         self.trf = trf_block
         self.efDict = efDict
-
-    def beforeChild(self, node, child, child_idx):
-        """
-            Called during expression tree traversal.
-            If node is an ExternalFunctionExpression listed in efDict,
-            replace it with an auxiliary variable y specific to its block.
-        """
-        descend, result = super().beforeChild(node, child, child_idx)
-        if (
-            not descend
-            and result.__class__ not in native_types
-            and result.is_variable_type()
-        ):
-            self.trf.all_variables.add(result)
-        return descend, result
+        self.unmapped = unmapped
 
     def exitNode(self, node, values):
         new_node = super().exitNode(node, values)
         if new_node.__class__ is not EXPR.ExternalFunctionExpression:
             return new_node
         if id(new_node._fcn) not in self.efDict:
+            self.unmapped.add(new_node._fcn.name)
             return new_node
-        # At this point we know this is an ExternalFunctionExpression
-        # node that we want to replace with an auliliary variable (y)
-
-        # The black box this EF belongs to (containers made in
-        # transformForTrustRegion)
         block_name = self.efDict[id(new_node._fcn)]
 
-        new_args = []
+        inputs = []
         seen = ComponentSet()
-        # TODO: support more than PythonCallbackFunctions
-        assert isinstance(new_node._fcn, PythonCallbackFunction)
         # Pyomo appends the PythonCallbackFunction's integer ID as the last
         # argument of the expression; it is not a black-box input.
         for arg in new_node.args[:-1]:
-            if type(arg) in nonpyomo_leaf_types or arg.is_fixed():
-                # We currently do not allow constants or parameters for
-                # the external functions.
-                raise RuntimeError(
-                    "TrustRegion does not support black boxes with "
-                    f"constant or parameter inputs\n\tExpression: {new_node}" )
-            if arg.is_expression_type():
-                # All expressions (including simple linear expressions)
-                # are replaced with a single auxiliary variable (and
-                # eventually an additional constraint equating the
-                # auxiliary variable to the original expression)
-                _x = self.trf.x[block_name].add()
-                _x.set_value(value(arg))
-                self.trf.conset[block_name].add(_x == arg)
-                new_args.append(_x)
-            else:
-                # The only thing left is bare variables: check for duplicates.
-                if arg in seen:
-                    raise RuntimeError(
-                        "TrustRegion does not support black boxes with "
-                        f"duplicate input arguments\n\tExpression: {new_node}" )
-                seen.add(arg)
-                new_args.append(arg)
+            if (type(arg) in nonpyomo_leaf_types or arg.is_fixed()
+                    or arg.is_expression_type() or arg in seen):
+                raise ValueError(
+                    "black-box inputs must be distinct, unfixed variables "
+                    "(introduce a bounded variable for a constant, parameter or "
+                    f"expression input): {new_node}")
+            seen.add(arg)
+            inputs.append(arg)
 
-        # Create tear variable for this EF (per block)
         _y = self.trf.y[block_name].add()
-        # Record bookkeeping for this block
         self.trf.external_fcns[block_name].append(new_node)
-        self.trf.exfn_xvars[block_name].append(new_args)
+        self.trf.exfn_xvars[block_name].append(inputs)
         return _y
 
 
@@ -134,6 +99,7 @@ class PyomoInterface:
     def __init__(self, m, efmap, config):
 
         self.config = config
+        self.out = printer(config.verbose)
         self.model = m
         self.TRF = self.transformForTrustRegion(self.model, efmap)
 
@@ -239,65 +205,51 @@ class PyomoInterface:
            efmap : dict { block_name: [ExternalFunction, ...] }
         """
 
-        # Flatten mapping: id(ef) -> block_name
+        check_efmap(efmap)
         efDict = {id(ef): block for block, funclist in efmap.items() for ef in funclist}
 
         TRF = Block()
-        TRF.all_variables = ComponentSet()
-
-        # Attach TRF block to model
         model.add_component(unique_component_name(model, 'tR'), TRF)
-
-        # Create per-block containers and register them as TRF components so .add() works
+        # Per black box: its output variables y, its ExternalFunction calls and
+        # their input variables
         TRF.y = {}
-        TRF.x = {}
-        TRF.conset = {}
         TRF.external_fcns = {}
         TRF.exfn_xvars = {}
-
         for block in efmap:
-            # unique names attached to the TRF block (prevents name collisions)
-            name_y = unique_component_name(TRF, f"y_{block}")
-            name_x = unique_component_name(TRF, f"x_{block}")
-            name_con = unique_component_name(TRF, f"con_{block}")
-
-            # create VarList / ConstraintList and attach to TRF so they are constructed
-            vlist_y = VarList()
-            vlist_x = VarList()
-            clist = ConstraintList()
-
-            TRF.add_component(name_y, vlist_y)
-            TRF.add_component(name_x, vlist_x)
-            TRF.add_component(name_con, clist)
-
-            # keep dictionary references for the rest of the code
-            TRF.y[block] = vlist_y
-            TRF.x[block] = vlist_x
-            TRF.conset[block] = clist
+            TRF.y[block] = VarList()
+            TRF.add_component(unique_component_name(TRF, f"y_{block}"), TRF.y[block])
             TRF.external_fcns[block] = []
             TRF.exfn_xvars[block] = []
-
-
-        # Also keep global lists for compatibility with solver
         TRF.xvars = []
         TRF.yvars = []
         TRF.zvars = []
 
-        # Substitute EF expressions in constraints & objective
+        # Substitute the black-box calls in the constraints and objective
+        unmapped = set()
         for con in model.component_data_objects(Constraint, active=True):
             con.set_value((con.lower,
-                       ReplaceEFVisitor(TRF, efDict).walk_expression(con.body),
-                       con.upper))
-
-        for obj in model.component_data_objects(Objective, active=True):
-            obj.set_value(ReplaceEFVisitor(TRF, efDict).walk_expression(obj.expr))
-            self.objective = obj
-            # Internally always minimise; sense maps back to the user's sense.
-            self.sense = 1
-            if self.objective.sense == maximize:
-                self.objective.expr = -1 * self.objective.expr
-                self.objective.sense = minimize
-                self.sense = -1
+                           ReplaceEFVisitor(TRF, efDict, unmapped).walk_expression(con.body),
+                           con.upper))
+        objectives = list(model.component_data_objects(Objective, active=True))
+        if len(objectives) != 1:
+            raise ValueError(f"the model needs exactly one active objective "
+                             f"(found {len(objectives)})")
+        self.objective = objectives[0]
+        self.objective.set_value(
+            ReplaceEFVisitor(TRF, efDict, unmapped).walk_expression(self.objective.expr))
+        if unmapped:
+            raise ValueError("ExternalFunction(s) called by the model but missing "
+                             f"from efmap: {', '.join(sorted(unmapped))}")
+        unused = [block for block in efmap if not TRF.external_fcns[block]]
+        if unused:
+            raise ValueError("efmap block(s) whose ExternalFunctions no active "
+                             f"constraint calls: {', '.join(map(str, unused))}")
+        # Internally always minimise; sense maps back to the user's sense.
+        self.sense = 1
+        if self.objective.sense == maximize:
+            self.objective.expr = -1 * self.objective.expr
+            self.objective.sense = minimize
+            self.sense = -1
 
         # Collect all original model variables
         allVariables = list(model.component_data_objects(Var))
@@ -391,6 +343,18 @@ class PyomoInterface:
         model.objCompCheckL = Objective(expr=obj)
 
     def cacheBound(self):
+        """Store the variable bounds; black-box inputs need finite bounds, and
+        with scaling=0 so do the other decision variables."""
+        need = self.TRF.xvars + (self.TRF.zvars if self.config.scaling == 0 else [])
+        unbounded = [v.name for v in need
+                     if not v.fixed and (v.lb is None or v.ub is None)]
+        if unbounded:
+            raise ValueError(
+                "variables without finite bounds: " + ', '.join(unbounded[:10])
+                + (' ...' if len(unbounded) > 10 else '')
+                + ". Black-box inputs always need bounds; with scaling=0 (the "
+                "default) so do all other variables. Add bounds, or use scaling=1 "
+                "if only the black-box inputs are bounded.")
         self.TRF.xvarlo = []
         self.TRF.xvarup = []
         self.TRF.zvarlo = []
@@ -449,6 +413,8 @@ class PyomoInterface:
                 (self.TRF.xvars, x0, self.TRF.xvarlo, self.TRF.xvarup),
                 (self.TRF.zvars, z0, self.TRF.zvarlo, self.TRF.zvarup)):
             for v, c, lo, up in zip(vars_, centre, los, ups, strict=True):
+                if v.fixed:
+                    continue
                 half = radius * (up - lo) if scaling == 0 else radius
                 lb = maxIgnoreNone(c - half, lo)
                 ub = minIgnoreNone(c + half, up)
@@ -523,6 +489,12 @@ class PyomoInterface:
         another block here; user-supplied `solver_options` apply to ANY solver.
         """
         opt = SolverFactory(self.config.solver)
+        if not opt.available(exception_flag=False):
+            hint = (" Install it with 'conda install -c conda-forge ipopt' or "
+                    "'idaes get-extensions', or put an ipopt executable on PATH."
+                    if self.config.solver == 'ipopt' else '')
+            raise RuntimeError(f"subproblem solver {self.config.solver!r} not "
+                               f"found.{hint} 'atrfu check' diagnoses the setup.")
         if restoration:
             if self.config.solver == 'ipopt':
                 # order preserved from the original restoration solve: user
@@ -575,8 +547,8 @@ class PyomoInterface:
             results = opt.solve(model, keepfiles=self.keepfiles,
                                 tee=self.stream_solver, load_solutions=False)
         except Exception as e:
-            print(f"\n--- Solver raised {type(e).__name__}: {e} ---")
-            print("--- treating as a failed subproblem solve ---")
+            self.out(f"\n--- Solver raised {type(e).__name__}: {e} ---", level=2)
+            self.out("--- treating as a failed subproblem solve ---", level=2)
             return False, 0, float('inf')
 
         try:
@@ -640,9 +612,10 @@ class PyomoInterface:
             for obj in model.component_data_objects(Objective, active=True):
                 return True, obj(), infeas_measure
         else:
-            print(f"\n--- Constraint violation: max_violation={infeas_measure:.3e} ---")
-            print(f"Solver: {results.solver.status}, {results.solver.termination_condition}")
-            if solution_loaded:
+            self.out(f"\n--- Constraint violation: max_violation={infeas_measure:.3e} ---", level=2)
+            self.out(f"Solver: {results.solver.status}, "
+                     f"{results.solver.termination_condition}", level=2)
+            if solution_loaded and self.config.verbose >= 2:
                 log_infeasible_constraints(model, log_expression=True, log_variables=True)
             return False, 0, infeas_measure
 
@@ -767,13 +740,13 @@ class PyomoInterface:
                     raise ValueError(f"Constraint {conlist[i]} has no bounds.")
 
             except Exception as e:
-                print(f"❌ Error computing Jv for constraint {i}: {e}")
+                self.out(f"WARNING: error computing Jv for constraint {i}: {e}", level=2)
                 return Constraint.Skip
 
         try:
             lp.lincons = Constraint(range(len(conlist) - 1), rule=linConMaker)
         except Exception as e:
-            print(f"❌ Error defining constraints: {e}")
+            self.out(f"WARNING: error defining constraints: {e}", level=2)
 
         # Define objective
         try:
@@ -782,7 +755,7 @@ class PyomoInterface:
             lp.obj = Objective(expr=sum(x[1] / gfnorm * lp.v[varlist[x[0]]]
                                        for x in g if varlist[x[0]] in lp.v))
         except Exception as e:
-            print(f"❌ Error defining objective function: {e}")
+            self.out(f"WARNING: error defining objective function: {e}", level=2)
 
         # Solve the model (restoration solver: built once in __init__, lighter
         # option set than the TRSP solver -- preserved for behaviour parity).
@@ -797,7 +770,7 @@ class PyomoInterface:
             lp.solutions.load_from(results)
             return True, abs(lp.obj()) / gfnorm if gfnorm > 1 else abs(lp.obj())
         else:
-            print("⚠️ Criticality check failed!")
+            self.out("WARNING: criticality check failed", level=2)
             return False, float("inf")
 
     def buildROM(self, x, radius_base, scaling):

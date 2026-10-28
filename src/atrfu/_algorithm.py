@@ -6,7 +6,7 @@ import numpy as np
 from ._filter import Filter
 from ._funnel import Funnel
 from ._gjh import ensure_gjh
-from ._helper import cloneXYZ, packXYZ, system_report
+from ._helper import cloneXYZ, packXYZ, printer, system_report
 from ._hypervolume import calculate_hypervolume, update_pareto_front
 from ._interface import PyomoInterface
 from ._logger import Logger
@@ -122,7 +122,8 @@ def TRF(m, eflist, config):
     _t_wall0 = time.perf_counter()
     _t_cpu0 = time.process_time()
 
-    ensure_gjh(verbose=True)
+    out = printer(config.verbose)
+    ensure_gjh(verbose=config.verbose >= 2)
 
     logger = Logger()
     problem = PyomoInterface(m, eflist, config)
@@ -136,23 +137,23 @@ def TRF(m, eflist, config):
     frp_name = {1: 'R1 classic (contract on reject)',
                 2: 'R2 relaxed (entry reset + rho radius)'}[
                     config.restoration_strategy]
-    print("========== A-TRFu SOLVER ==========")
-    print(f"Globalization strategy: {config.globalization_strategy} "
+    out("========== A-TRFu SOLVER ==========")
+    out(f"Globalization strategy: {config.globalization_strategy} "
           f"({strat_name})")
-    print(f"Hypervolume sampling  : multiple_black_boxes="
+    out(f"Hypervolume sampling  : multiple_black_boxes="
           f"{config.multiple_black_boxes}")
-    print(f"Restoration strategy  : {config.restoration_strategy} "
+    out(f"Restoration strategy  : {config.restoration_strategy} "
           f"({frp_name})")
-    print(f"Problem size          : {lx + ly + lz} variables  "
+    out(f"Problem size          : {lx + ly + lz} variables  "
           f"(x|y|z = {lx}|{ly}|{lz});  "
           f"{len(problem.TRF.y)} black-box block(s)")
-    print("    x = black-box inputs | y = black-box outputs | z = remaining")
-    print(f"Constraints           : {neq + nineq}  "
+    out("    x = black-box inputs | y = black-box outputs | z = remaining")
+    out(f"Constraints           : {neq + nineq}  "
           f"(equality {neq} | inequality {nineq})")
-    print(f"Tolerances            : ep_i={config.ep_i:.1e}, "
+    out(f"Tolerances            : ep_i={config.ep_i:.1e}, "
           f"ep_chi={config.ep_chi:.1e}, ep_delta={config.ep_delta:.1e}, "
           f"max_it={config.max_it}")
-    print("===================================\n")
+    out("===================================\n")
 
     if config.scaling == 0:
         config.trust_radius = 1
@@ -196,7 +197,7 @@ def TRF(m, eflist, config):
     accepted_radius = config.trust_radius
 
     while True:
-        if iteration >= 0:
+        if iteration >= 0 and config.verbose >= 2:
             logger.printIteration(iteration)
         now = time.time()
         IT = now - prev_iter_start
@@ -205,11 +206,8 @@ def TRF(m, eflist, config):
         iteration += 1
         if iteration > config.max_it:
             exit_msg = "Maximum iterations"
-            print("EXIT: Maximum iterations\n")
+            out("EXIT: Maximum iterations\n")
             break
-
-        if iteration == 1:
-            config.sample_region = False
 
         # Keep the sampling region within the trust region
         if config.trust_radius < config.sample_radius:
@@ -245,33 +243,28 @@ def TRF(m, eflist, config):
         if (feas_ok and chik < config.ep_chi
                 and config.sample_radius < config.ep_delta):
             exit_msg = "OPTIMAL SOLUTION FOUND"
-            print(f"EXIT: OPTIMAL SOLUTION FOUND "
+            out(f"EXIT: OPTIMAL SOLUTION FOUND "
                   f"(thetak={thetak:.3e}, chik={chik:.3e})")
             break
 
         if feas_ok and stepNorm < config.ep_s:
             exit_msg = "POSSIBLY AN OPTIMAL SOLUTION IS FOUND"
-            print(f"EXIT: POSSIBLY AN OPTIMAL SOLUTION IS FOUND "
+            out(f"EXIT: POSSIBLY AN OPTIMAL SOLUTION IS FOUND "
                   f"(thetak={thetak:.3e}, chik={chik:.3e})")
             break
 
         if config.trust_radius <= config.delta_min and feas_ok:
             if subopt_flag:
                 exit_msg = "FEASIBLE SOLUTION FOUND"
-                print(f"EXIT: FEASIBLE SOLUTION FOUND (thetak={thetak:.3e})")
+                out(f"EXIT: FEASIBLE SOLUTION FOUND (thetak={thetak:.3e})")
                 break
             subopt_flag = True
         else:
             subopt_flag = False
 
-        # Criticality phase (sigma-based)
-        if not config.sample_region:
-            if config.sample_radius > chik * config.criticality_check:
-                config.sample_radius = config.sample_radius / 2
-        else:
-            config.sample_radius = max(
-                min(config.sample_radius, chik * config.criticality_check),
-                config.delta_min)
+        # Criticality phase: refine the surrogate as chi decreases
+        if config.sample_radius > chik * config.criticality_check:
+            config.sample_radius = config.sample_radius / 2
 
         logger.setCurIter(trustRadius=config.trust_radius,
                           sampleRadius=config.sample_radius)
@@ -300,12 +293,12 @@ def TRF(m, eflist, config):
                          f"{restoration_theta0:.3e} -> {thetak:.3e}")
                 if feas_ok:   # stalled, but already feasible
                     exit_msg = "FEASIBLE SOLUTION FOUND (restoration stationary)"
-                    print(f"EXIT: FEASIBLE SOLUTION FOUND (restoration "
+                    out(f"EXIT: FEASIBLE SOLUTION FOUND (restoration "
                           f"stationary after {run}, thetak={thetak:.3e} < "
                           f"ep_i={config.ep_i:.1e}; {trend})")
                     break
                 exit_msg = "RESTORATION STATIONARY -- NOT FEASIBLE"
-                print(f"EXIT: RESTORATION STATIONARY -- NOT FEASIBLE ({run}, "
+                out(f"EXIT: RESTORATION STATIONARY -- NOT FEASIBLE ({run}, "
                       f"thetak={thetak:.3e} >= ep_i={config.ep_i:.1e}; "
                       f"{trend})")
                 break
@@ -324,11 +317,11 @@ def TRF(m, eflist, config):
                     clamped = (', CLAMPED at radius_max'
                                if config.trust_radius >= config.radius_max
                                else '')
-                    print(f"[FRP] entering restoration phase "
+                    out(f"[FRP] entering restoration phase "
                           f"{restoration_phases}: Delta {delta_before:.3e} -> "
                           f"{config.trust_radius:.3e} (gamma_e * "
                           f"accepted_radius={accepted_radius:.3e}{clamped}), "
-                          f"thetak={thetak:.3e}")
+                          f"thetak={thetak:.3e}", level=2)
 
         # Solve TRSP_k, or the restoration problem (7.11)
         if not restoration_mode:
@@ -343,15 +336,15 @@ def TRF(m, eflist, config):
             frp_solves += 1
             at_max = (' (at radius_max)'
                       if config.trust_radius >= config.radius_max else '')
-            print(f"[FRP] solve {restoration_iters} of phase "
+            out(f"[FRP] solve {restoration_iters} of phase "
                   f"{restoration_phases}, thetak={thetak:.3e}, "
-                  f"Delta={config.trust_radius:.3e}{at_max}")
+                  f"Delta={config.trust_radius:.3e}{at_max}", level=2)
 
         # A failed subproblem solve is a rejected step. At the radius floor,
         # either exit or escape an infeasible wedge with an escalating reset.
         if not flag:
             which = "restoration" if restoration_mode else "TRSP"
-            print(f"WARNING: {which} solve failed; treating as a rejected step")
+            out(f"WARNING: {which} solve failed; treating as a rejected step", level=2)
             x, y, z = cloneXYZ(xk, yk, zk)
             if config.trust_radius <= config.delta_min:
                 if feas_ok:
@@ -360,7 +353,7 @@ def TRF(m, eflist, config):
                     problem.setVarValue(x=x, y=y, z=z)
                     exit_msg = (f"FEASIBLE SOLUTION FOUND "
                                 f"({which} stalled at minimum radius)")
-                    print(f"EXIT: FEASIBLE SOLUTION FOUND ({which} stalled "
+                    out(f"EXIT: FEASIBLE SOLUTION FOUND ({which} stalled "
                           f"at minimum radius, thetak={thetak:.3e})")
                     break
                 if radius_resets < config.n_radius_resets:
@@ -374,14 +367,14 @@ def TRF(m, eflist, config):
                     consecutive_rejections = 0
                     rebuildROM = True
                     accepted_radius = config.trust_radius
-                    print(f"WARNING: infeasible wedge at minimum radius "
+                    out(f"WARNING: infeasible wedge at minimum radius "
                           f"(thetak={thetak:.3e}); radius reset "
                           f"{radius_resets}/{config.n_radius_resets} "
-                          f"to {config.trust_radius:.1e}")
+                          f"to {config.trust_radius:.1e}", level=2)
                     continue
                 problem.setVarValue(x=x, y=y, z=z)
                 exit_msg = f"{which.upper()} STALLED -- NOT FEASIBLE"
-                print(f"EXIT: {exit_msg} (thetak={thetak:.3e} >= "
+                out(f"EXIT: {exit_msg} (thetak={thetak:.3e} >= "
                       f"ep_i={config.ep_i:.1e}, radius resets exhausted)")
                 break
             contract(config)
@@ -411,9 +404,9 @@ def TRF(m, eflist, config):
         if restoration_mode and config.restoration_strategy == 2:
             action = ('contract' if rhok < config.eta1 else
                       'expand' if rhok >= config.eta2 else 'maintain')
-            print(f"[FRP] solve {restoration_iters} outcome: "
+            out(f"[FRP] solve {restoration_iters} outcome: "
                   f"theta+={theta:.3e} (thetak={thetak:.3e}), "
-                  f"rhok={rhok:.3e} -> {action}")
+                  f"rhok={rhok:.3e} -> {action}", level=2)
 
         status = globalisation.classify(thetak, theta, objk, obj,
                                         config.trust_radius,
@@ -445,47 +438,48 @@ def TRF(m, eflist, config):
         thetak = theta
         objk = obj
 
-    logger.printVectors()
+    if config.verbose >= 2:
+        logger.printVectors()
 
     # ---- run summary --------------------------------------------------------
     wall_s = time.perf_counter() - _t_wall0
     cpu_s = time.process_time() - _t_cpu0
     y_per_block = ", ".join(f"{blk}={len(problem.TRF.y[blk])}"
                             for blk in sorted(problem.TRF.y))
-    print("\n========== RUN SUMMARY ==========")
-    print(f"Iterations            : {iteration}")
-    print(f"Problem size          : {lx + ly + lz} variables  "
+    out("\n========== RUN SUMMARY ==========")
+    out(f"Iterations            : {iteration}")
+    out(f"Problem size          : {lx + ly + lz} variables  "
           f"(x|y|z = {lx}|{ly}|{lz})")
-    print("    x = black-box inputs | y = black-box outputs | z = remaining")
-    print(f"Black-box blocks      : {len(problem.TRF.y)}  "
+    out("    x = black-box inputs | y = black-box outputs | z = remaining")
+    out(f"Black-box blocks      : {len(problem.TRF.y)}  "
           f"(outputs per block: {y_per_block})")
-    print(f"Constraints           : {neq + nineq}  "
+    out(f"Constraints           : {neq + nineq}  "
           f"(equality {neq} | inequality {nineq})")
-    print(f"Wall time (s)         : {wall_s:.3f}")
-    print(f"CPU time (s)          : {cpu_s:.3f}   (process_time)")
-    print("External BB evaluations (true black-box callback calls):")
+    out(f"Wall time (s)         : {wall_s:.3f}")
+    out(f"CPU time (s)          : {cpu_s:.3f}   (process_time)")
+    out("External BB evaluations (true black-box callback calls):")
     for blk in sorted(problem.bb_eval_counts):
-        print(f"    {blk:<12}: {problem.bb_eval_counts[blk]}")
-    print(f"    {'TOTAL':<12}: {problem.bb_eval_total}")
+        out(f"    {blk:<12}: {problem.bb_eval_counts[blk]}")
+    out(f"    {'TOTAL':<12}: {problem.bb_eval_total}")
     if problem.bb_cache_enabled:
         hits, misses = problem.bb_cache_hits, problem.bb_eval_total
         requests = hits + misses
         rate = (100.0 * hits / requests) if requests else 0.0
-        print(f"BB cache              : {hits} hits / {requests} requests "
+        out(f"BB cache              : {hits} hits / {requests} requests "
               f"({rate:.1f}% hit rate); {misses} true evaluations")
     else:
-        print("BB cache              : disabled")
+        out("BB cache              : disabled")
 
     duals = dict(problem.last_duals)
     if problem.report_duals:
-        print(f"Dual values           : {len(duals)} captured "
+        out(f"Dual values           : {len(duals)} captured "
               f"(last subproblem solve); largest |dual|:")
         for name, val in sorted(duals.items(), key=lambda t: -abs(t[1]))[:15]:
-            print(f"    {name:<32}: {val:.6g}")
+            out(f"    {name:<32}: {val:.6g}")
 
-    print("System:")
-    print(system_report())
-    print("=================================\n")
+    out("System:")
+    out(system_report())
+    out("=================================\n")
 
     def series(attr):
         return [float('nan') if getattr(it, attr) is None

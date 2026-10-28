@@ -29,6 +29,9 @@ dependencies = [
 test = ["pytest>=7"]
 dev = ["pytest>=7", "ruff", "build", "twine"]
 
+[project.scripts]
+atrfu = "atrfu.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/gulhameed361/atrfu"
 Issues = "https://github.com/gulhameed361/atrfu/issues"
