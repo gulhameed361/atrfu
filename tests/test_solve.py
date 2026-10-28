@@ -78,3 +78,10 @@ def test_solve_is_repeatable():
 @pytest.mark.parametrize('script', sorted(p.name for p in EXAMPLES.glob('*.py')))
 def test_examples_run(script):
     runpy.run_path(str(EXAMPLES / script), run_name='__main__')
+
+
+@pytest.mark.slow
+def test_readme_example():
+    readme = (EXAMPLES.parent / 'README.md').read_text(encoding='utf-8')
+    code = readme.split('```python\n', 1)[1].split('```', 1)[0]
+    exec(compile(code, 'README.md', 'exec'), {})

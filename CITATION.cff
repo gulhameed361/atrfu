@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it, and the thesis that describes the method, as below."
+type: software
+title: "atrfu: the A-TRFu solver for grey-box optimisation"
+abstract: "A pip-installable implementation of A-TRFu, an advanced trust-region funnel method for grey-box optimisation with Pyomo, with hypervolume sampling-region management and feasibility restoration for problems with several black boxes."
+authors:
+  - family-names: Hameed
+    given-names: Gul
+    orcid: "https://orcid.org/0000-0002-2069-5132"
+    affiliation: "School of Chemistry and Chemical Engineering, University of Surrey"
+version: "1.0.0"
+license: MIT
+repository-code: "https://github.com/gulhameed361/atrfu"
+url: "https://atrfu.readthedocs.io"
+keywords:
+  - "grey-box optimisation"
+  - "trust-region methods"
+  - "funnel"
+  - "hypervolume"
+  - "surrogate models"
+  - "Pyomo"
+preferred-citation:
+  type: thesis
+  title: "Rigorous Trust-Region Algorithms for Surrogate-based Grey-box Optimisation"
+  authors:
+    - family-names: Hameed
+      given-names: Gul
+      orcid: "https://orcid.org/0000-0002-2069-5132"
+  institution:
+    name: "University of Surrey"
+  year: 2026
+  thesis-type: "PhD thesis"
+references:
+  - type: article
+    title: "Advanced trust-region funnel algorithm for grey-box optimization"
+    authors:
+      - family-names: Hameed
+        given-names: Gul
+        orcid: "https://orcid.org/0000-0002-2069-5132"
+    status: in-preparation
+  - type: software
+    title: "A-TRFu: advanced trust-region funnel method for grey-box optimisation"
+    authors:
+      - family-names: Hameed
+        given-names: Gul
+        orcid: "https://orcid.org/0000-0002-2069-5132"
+    doi: "10.5281/zenodo.23173541"

@@ -28,12 +28,15 @@ dependencies = [
 [project.optional-dependencies]
 test = ["pytest>=7"]
 dev = ["pytest>=7", "ruff", "build", "twine"]
+docs = ["sphinx>=7", "myst-parser>=3", "furo"]
 
 [project.scripts]
 atrfu = "atrfu.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/gulhameed361/atrfu"
+Documentation = "https://atrfu.readthedocs.io"
+Changelog = "https://atrfu.readthedocs.io/en/stable/changelog.html"
 Issues = "https://github.com/gulhameed361/atrfu/issues"
 
 [tool.setuptools.dynamic]

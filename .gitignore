@@ -12,3 +12,5 @@ gjh.exe
 dev/out/
 dev/out_*.txt
 docs/_build/
+# generated from the option table by docs/conf.py
+docs/options.md
