@@ -21,7 +21,16 @@ authors:
     given-names: Michael
     affiliation: "University of Surrey"
 version: "1.0.0"
+date-released: "2026-10-29"
 license: MIT
+doi: "10.5281/zenodo.23769354"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23769353"
+    description: "Concept DOI: all releases"
+  - type: doi
+    value: "10.5281/zenodo.23769354"
+    description: "Release 1.0.0"
 repository-code: "https://github.com/gulhameed361/atrfu"
 url: "https://atrfu.readthedocs.io"
 keywords:

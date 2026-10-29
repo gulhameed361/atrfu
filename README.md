@@ -1,5 +1,9 @@
 # atrfu
 
+[![PyPI](https://img.shields.io/pypi/v/atrfu.svg)](https://pypi.org/project/atrfu/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23769353.svg)](https://doi.org/10.5281/zenodo.23769353)
+[![Docs](https://readthedocs.org/projects/atrfu/badge/?version=stable)](https://atrfu.readthedocs.io/en/stable/)
+
 A-TRFu, an advanced trust-region funnel method for **grey-box optimisation**
 with [Pyomo](https://www.pyomo.org). A grey-box problem couples an
 equation-based Pyomo model with black boxes, such as simulations or legacy
@@ -47,7 +51,9 @@ the [tuning guide](https://atrfu.readthedocs.io/en/stable/tuning.html).
 
 Please cite G. Hameed, *Rigorous Trust-Region Algorithms for Surrogate-based
 Grey-box Optimisation*, PhD thesis, University of Surrey, 2026, and the
-software release (`CITATION.cff`, Zenodo DOI per release).
+software: [10.5281/zenodo.23769353](https://doi.org/10.5281/zenodo.23769353)
+for all versions. Each release has its own DOI, and `CITATION.cff` has the
+metadata.
 
 ## License
 
